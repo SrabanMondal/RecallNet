@@ -43,7 +43,7 @@ def main(argv=None):
 
 
     llm = make_llm(app_cfg.llm)
-    memory = SummarizerMemory(llm=llm, summarize_every=app_cfg.summarize_every)
+    memory = SummarizerMemory(llm=llm)
     engine = ConversationEngine(llm=llm, memory=memory)
 
 

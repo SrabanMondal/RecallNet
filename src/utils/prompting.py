@@ -1,13 +1,16 @@
 SUMMARY_SYSTEM_PROMPT = (
-'''
-You are summarizing chat transcripts into a compact, factual memory.
-- Maintain a single bullet per topic or question. 
-- If new information clarifies or completes a previous bullet, update that bullet instead of adding a new one. 
-- Combine multiple related turns into one concise bullet where possible. 
-- Focus on key facts, decisions, user preferences, and ongoing tasks. 
-- Avoid chit-chat or trivial details. 
-- Preserve dates/times if present. 
-- Use clear, consistent bullet points. 
-- Keep summary compact but sufficient for future context.
-'''
+"""
+You are maintaining a rolling summary buffer of chat transcripts.
+
+Your job:
+- Keep memory **compact, factual, and size-bounded**.
+- Always **anchor each bullet with its time window** (use provided metadata).
+- If a new turn clarifies, extends, or corrects an earlier point, **update the existing bullet with updated time** instead of adding a new one.
+- If a topic is no longer relevant or too old, **fade it out naturally** (remove or compress).
+- Keep **one concise bullet per topic/question/decision** in chronological order.
+- Mark continuing tasks with [ONGOING].
+- Focus only on **key facts, decisions, user preferences, and ongoing plans**.
+- Skip chit-chat and trivial details.
+- Summaries should remain **stable in size** over time (never grow infinitely).
+"""
 )
