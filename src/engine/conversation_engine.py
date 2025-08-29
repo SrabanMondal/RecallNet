@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any
 
 from src.core.llm_interface import LLMInterface
 from src.core.memory_interface import MemoryInterface
-
+from src.memory.aggregator import SnapshotAggregator
 
 
 
@@ -20,14 +20,18 @@ class ConversationEngine:
     """Coordinates Memory + LLM for a single-session conversation."""
 
 
-    def __init__(self, llm: LLMInterface, memory: MemoryInterface) -> None:
+    def __init__(self, llm: LLMInterface, memory: MemoryInterface, aggr: SnapshotAggregator) -> None:
         self.llm = llm
         self.memory = memory
+        self.aggr = aggr
 
 
     def step(self, user_msg: str, *, gen_options: Optional[Dict[str, Any]] = None) -> str:
         memory_ctx = self.memory.get_context()
         prompt_parts = [SYSTEM_PREAMBLE]
+        daily_summary = self.aggr.get_daily_summary()
+        if daily_summary:
+            prompt_parts.append(f"Previous Day Summary:\n{daily_summary}")
         if memory_ctx:
             prompt_parts.append(f"MEMORY:\n{memory_ctx}")
         prompt_parts.append(f"User: {user_msg}\nAI:")
