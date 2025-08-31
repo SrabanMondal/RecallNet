@@ -1,0 +1,6 @@
+from typing import Any, Dict, Optional
+
+class StorageInterface:
+    def load(self) -> Optional[Dict]: ...
+    def save(self, data: Dict) -> None: ...
+
