@@ -48,3 +48,30 @@ class SnapshotAggregator:
         if not day:
             day = datetime.utcnow().date().isoformat()
         return self._daily.get(day, "")
+    
+    def merge_hour(self, prev_hour_key: str, hour_snapshots: List[Dict]) -> str:
+        """Continuity-aware merge: prev hour summary + this hour's snapshots."""
+        prev = self.hourly.get(prev_hour_key, "")
+        chunks = "\n".join([s["summary"] for s in hour_snapshots])
+
+        prompt = (
+            f"{SUMMARY_SYSTEM_PROMPT}\n\n"
+            f"Previous Hour Summary (may be empty):\n{prev}\n\n"
+            f"Current Hour Snapshots:\n{chunks}\n\n"
+            "Update/compose the hour summary:\n"
+            "- Merge related points; maintain timeline.\n"
+            "- Carry forward [ONGOING] items; mark [RESOLVED]/[CANCELLED] if applicable.\n"
+            "- Keep it compact and factual."
+        )
+        return self.llm.generate(prompt).strip()
+
+    def merge_day(self, day_key: str) -> str:
+        hours = [k for k in self.hourly.keys() if k.startswith(day_key)]
+        hours.sort()
+        merged = "\n".join([self.hourly[h] for h in hours])
+        prompt = (
+            f"{SUMMARY_SYSTEM_PROMPT}\n\n"
+            f"Hourly Summaries for {day_key}:\n{merged}\n\n"
+            "Create the daily memory (big-picture, decisions, preferences, [ONGOING]):"
+        )
+        return self.llm.generate(prompt).strip()
