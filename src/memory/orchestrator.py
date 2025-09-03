@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from typing import Dict, List
-from src.memory.summarizer_memory import SummarizerMemory
+from src.memory.agent_memory import SummarizerMemory
 from src.memory.aggregator import SnapshotAggregator
 from src.core.storage_interface import StorageInterface
 

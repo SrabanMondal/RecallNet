@@ -1,77 +1,105 @@
-from datetime import datetime
-from typing import List, Dict
+from dataclasses import dataclass
+from datetime import date
+from typing import List
 from src.core.llm_interface import LLMInterface
 from src.utils.prompting import SUMMARY_SYSTEM_PROMPT
+from src.core.memory_interface import Chapter, SnapShot, DailyMemory
+from src.storage.daily_storage import DailyMemoryStorage
+from src.storage.chapter_storage import ChapterStorage
+import threading
+import datetime
 
-class SnapshotAggregator:
-    def __init__(self, llm: LLMInterface):
+class Aggregator:
+    def __init__(self, llm: LLMInterface, chapter_store: ChapterStorage, daily_store: DailyMemoryStorage):
         self.llm = llm
-        self._hourly: Dict[str, str] = {}  # {hour: summary}
-        self._daily: Dict[str, str] = {}   # {day: summary}
+        # self._hourly: dict[str, str] = {}
+        # self._daily: dict[str, str] = {}
+        self.daily_store = daily_store
+        self.chapter_store = chapter_store
+        t = threading.Thread(target=self._daily_rollup, daemon=True)
 
-    def aggregate_hourly(self, snapshots: List[Dict]) -> None:
-        """Group snapshots by hour, merge into compact hourly summary"""
-        # snapshots already have iso timestamps
-        grouped = {}
-        for snap in snapshots:
-            hour = snap["time"][:13]  # yyyy-mm-ddTHH
-            grouped.setdefault(hour, []).append(snap["summary"])
+        t.start()
 
-        for hour, chunks in grouped.items():
-            merged = "\n".join(chunks)
+    # ... existing methods ...
+
+    def merge_chapter(self, prev_chapter: Chapter | None, snapshots: List[SnapShot]) -> Chapter:
+        """
+        Merge a previous chapter memory with a list of snapshots using LLM.
+        - prev_chapter: Chapter object with existing memory (can be None)
+        - snapshots: List of SnapShot objects
+        Returns:
+            New Chapter object with merged memory and date = last snapshot date
+        """
+        if not snapshots:
+            # If no snapshots, return prev_chapter or empty chapter
+            if prev_chapter:
+                return prev_chapter
+            else:
+                return Chapter(day=date.today(), memory="", tags=None)
+
+        snapshot_text = "\n".join([s.summary for s in snapshots])
+
+        # Prepare LLM prompt
+        if prev_chapter and prev_chapter.memory.strip():
             prompt = (
                 f"{SUMMARY_SYSTEM_PROMPT}\n\n"
-                f"Existing Hour Summary:\n{self._hourly.get(hour, '')}\n\n"
-                f"Snapshots:\n{merged}\n\n"
-                f"Update the hourly memory summary:"
+                f"Previous Chapter Memory:\n{prev_chapter.memory}\n\n"
+                f"Current Snapshots:\n{snapshot_text}\n\n"
+                "Compose a new chapter memory:\n"
+                "- Merge previous memory and snapshots.\n"
+                "- Keep it factual and concise.\n"
+                "- Maintain timeline, carry forward ongoing items, mark resolved/cancelled if any."
             )
-            self._hourly[hour] = self.llm.generate(prompt).strip()
-
-    def aggregate_daily(self) -> None:
-        """Group hourly summaries into daily memory"""
-        grouped = {}
-        for hour, summary in self._hourly.items():
-            day = hour[:10]  # yyyy-mm-dd
-            grouped.setdefault(day, []).append(summary)
-
-        for day, chunks in grouped.items():
-            merged = "\n".join(chunks)
+        else:
             prompt = (
                 f"{SUMMARY_SYSTEM_PROMPT}\n\n"
-                f"Existing Daily Summary:\n{self._daily.get(day, '')}\n\n"
-                f"Hourly Summaries:\n{merged}\n\n"
-                f"Update the daily memory summary:"
+                f"Current Snapshots:\n{snapshot_text}\n\n"
+                "Compose a new chapter memory:\n"
+                "- Use only the snapshots provided.\n"
+                "- Keep it factual and concise.\n"
+                "- Maintain timeline, carry forward ongoing items, mark resolved/cancelled if any."
             )
-            self._daily[day] = self.llm.generate(prompt).strip()
 
-    def get_daily_summary(self, day: str = None) -> str:
-        if not day:
-            day = datetime.utcnow().date().isoformat()
-        return self._daily.get(day, "")
-    
-    def merge_hour(self, prev_hour_key: str, hour_snapshots: List[Dict]) -> str:
-        """Continuity-aware merge: prev hour summary + this hour's snapshots."""
-        prev = self.hourly.get(prev_hour_key, "")
-        chunks = "\n".join([s["summary"] for s in hour_snapshots])
+        merged_memory = self.llm.generate(prompt).strip()
 
+        # Date for new chapter = last snapshot's date
+        new_date = snapshots[-1].day
+
+        # Carry forward tags if available
+        tags = prev_chapter.tags if prev_chapter else None
+
+        return Chapter(day=new_date, memory=merged_memory, tags=tags)
+
+    def _daily_rollup(self):
+        """Roll up last active day's chapters into a daily memory block."""
+        today = datetime.utcnow().date()
+
+        # last saved chapter find karo
+        last_chapter = self.chapter_store.get_last_chapter()
+        if not last_chapter:
+            return
+
+        last_active_day = last_chapter.day
+        if last_active_day == today:
+            return  # current day ko abhi roll-up mat karo
+
+        # check agar daily memory already saved hai us din ke liye
+        if self.daily_store.get_by_date(last_active_day):
+            return  # already summarized
+
+        # fetch all chapters from last active day
+        chapters: List[Chapter] = self.chapter_store.get_by_day(last_active_day)
+        if not chapters:
+            return
+
+        merged = "\n".join([c.memory for c in chapters])
         prompt = (
             f"{SUMMARY_SYSTEM_PROMPT}\n\n"
-            f"Previous Hour Summary (may be empty):\n{prev}\n\n"
-            f"Current Hour Snapshots:\n{chunks}\n\n"
-            "Update/compose the hour summary:\n"
-            "- Merge related points; maintain timeline.\n"
-            "- Carry forward [ONGOING] items; mark [RESOLVED]/[CANCELLED] if applicable.\n"
-            "- Keep it compact and factual."
+            f"Chapters for {last_active_day.isoformat()}:\n{merged}\n\n"
+            "Create a single daily memory capturing key events, decisions, preferences, and [ONGOING] items."
         )
-        return self.llm.generate(prompt).strip()
+        day_memory = self.llm.generate(prompt).strip()
 
-    def merge_day(self, day_key: str) -> str:
-        hours = [k for k in self.hourly.keys() if k.startswith(day_key)]
-        hours.sort()
-        merged = "\n".join([self.hourly[h] for h in hours])
-        prompt = (
-            f"{SUMMARY_SYSTEM_PROMPT}\n\n"
-            f"Hourly Summaries for {day_key}:\n{merged}\n\n"
-            "Create the daily memory (big-picture, decisions, preferences, [ONGOING]):"
-        )
-        return self.llm.generate(prompt).strip()
+        # save as daily memory (SQL table)
+        daily_mem = DailyMemory(day=last_active_day, memory=day_memory, tags=["daily-summary"])
+        self.daily_store.save(daily_mem)

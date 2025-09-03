@@ -6,10 +6,12 @@ import sys
 from src.config import AppConfig, LLMConfig
 from src.llms.gemini_llm import GeminiLLM
 from src.llms.ollama_llm import OllamaLLM
-from src.memory.summarizer_memory import SummarizerMemory
+from src.memory.agent_memory import AgentMemory
 from src.engine.conversation_engine import ConversationEngine
-
-
+from src.storage.chapter_storage import ChapterStorage
+from src.storage.daily_storage import DailyMemoryStorage
+from src.storage.json_storage import RecentStorage
+from src.memory.aggregator import Aggregator
 
 
 PROVIDER_CHOICES = ("gemini", "ollama")
@@ -43,7 +45,12 @@ def main(argv=None):
 
 
     llm = make_llm(app_cfg.llm)
-    memory = SummarizerMemory(llm=llm)
+    chapter_store = ChapterStorage("chapters.db")
+    daily_store = DailyMemoryStorage("memory.db")
+    recent_store = RecentStorage("recent.json")
+    aggr = Aggregator(llm, chapter_store, daily_store)
+    memory = AgentMemory(llm=llm,chapter_store=chapter_store,recent_store=recent_store, aggr=aggr)
+    
     engine = ConversationEngine(llm=llm, memory=memory)
 
 
