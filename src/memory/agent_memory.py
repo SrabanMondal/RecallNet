@@ -29,7 +29,7 @@ class AgentMemory(MemoryInterface):
     max_recent: int = 5
     _turn_counter: int = 0
     _turns: deque[Turn] =  field(init=False) # load from recent_store
-    _rolling_snapshot: SnapShot = None # load from recent store
+    _rolling_snapshot: SnapShot|None = None # load from recent store
     _snapshots: List[SnapShot] =  field(default_factory=list)  # list of {time, summary}
     #_last_window: datetime = field(default_factory=datetime.now)
     
@@ -52,7 +52,8 @@ class AgentMemory(MemoryInterface):
         if self._turn_counter==self.snap_counter:
             self._create_snapshot()
             self._turn_counter=0
-            self.recent_store.save_rolling_snapshot(self._rolling_snapshot)
+            if self._rolling_snapshot:
+                self.recent_store.save_rolling_snapshot(self._rolling_snapshot)
         
         if len(self._snapshots)==self.chap_counter:
             self._create_chapter()
@@ -62,13 +63,21 @@ class AgentMemory(MemoryInterface):
 
     def _summarize_incremental(self, turn: Turn) -> SnapShot:
         """Update rolling summary with a single old turn"""
-        transcript = f"[{turn['time'].strftime("%Y-%m-%d %H:%M:%S")}]\nUser: {turn['user']}\nAI: {turn['ai']}"
-        prompt = (
-            f"{SUMMARY_SYSTEM_PROMPT}\n\n"
-            f"Existing Summary:\n{self._rolling_summary}\n\n"
-            f"New Turn:\n{transcript}\n\n"
-            f"Update the memory summary now:"
-        )
+        transcript = f"[{turn.time.strftime("%Y-%m-%d %H:%M:%S")}]\nUser: {turn.user}\nAI: {turn.ai}"
+        prompt=""
+        if self._rolling_snapshot:
+            prompt = (
+                f"{SUMMARY_SYSTEM_PROMPT}\n\n"
+                f"Existing Summary:\n{self._rolling_snapshot.summary}\n\n"
+                f"New Turn:\n{transcript}\n\n"
+                f"Update the memory summary now:"
+            )
+        else:
+            prompt = (
+                f"{SUMMARY_SYSTEM_PROMPT}\n\n"
+                f"New Turn:\n{transcript}\n\n"
+                f"Update the memory summary now:"
+            )
         summary =  self.llm.generate(prompt).strip()
         return SnapShot(day=turn.time, summary=summary)
 
@@ -78,9 +87,9 @@ class AgentMemory(MemoryInterface):
             return
         self._snapshots.append(self._rolling_snapshot)
 
-    def get_context(self, *, k_recent: int = None) -> str:
+    def get_context(self) -> str:
         """Get recent context"""
-        k_recent = k_recent or self.max_recent
+        k_recent = self.max_recent
         recent = list(self._turns)[-k_recent:]
         recent_txt = "\n".join(
             [f"[{t.time.strftime("%Y-%m-%d %H:%M")}]\nUser: {t.user}\nAI: {t.ai}" for t in recent]
@@ -100,8 +109,10 @@ class AgentMemory(MemoryInterface):
         self._snapshots.clear()
 
     def summary(self) -> str:
-        return self._rolling_snapshot.summary
+        if self._rolling_snapshot:
+            return self._rolling_snapshot.summary
+        return ""
 
 
     def all_turns(self) -> List[Tuple[str, str]]:
-        return [(t['user'], t['ai']) for t in self._turns]
+        return [(t.user, t.ai) for t in self._turns]

@@ -69,7 +69,7 @@ class MemoryInterface(Protocol):
         ...
 
 
-    def get_context(self, *, k_recent: int = 4) -> str:
+    def get_context(self) -> str:
         ...
 
 
