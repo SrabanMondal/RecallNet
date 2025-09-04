@@ -1,6 +1,9 @@
 from __future__ import annotations
 import argparse
 import sys
+from rich.console import Console
+from rich.markdown import Markdown
+from rich.panel import Panel
 
 
 from src.config import AppConfig, LLMConfig
@@ -12,7 +15,7 @@ from src.storage.chapter_storage import ChapterStorage
 from src.storage.daily_storage import DailyMemoryStorage
 from src.storage.json_storage import RecentStorage
 from src.memory.aggregator import Aggregator
-
+from src.memory.metacognition import MetaCognition
 
 PROVIDER_CHOICES = ("gemini", "ollama")
 
@@ -50,8 +53,8 @@ def main(argv=None):
     recent_store = RecentStorage("recent.json")
     aggr = Aggregator(llm, chapter_store, daily_store)
     memory = AgentMemory(llm=llm,chapter_store=chapter_store,recent_store=recent_store, aggr=aggr)
-    
-    engine = ConversationEngine(llm=llm, memory=memory)
+    meta = MetaCognition(llm=llm,chapter_store=chapter_store,daily_store=daily_store)
+    engine = ConversationEngine(llm=llm, memory=memory,meta=meta, aggr=aggr)
 
 
     print("\n>>> Memory‑First LLM (CLI). Type 'exit' to quit.\n")
@@ -62,13 +65,14 @@ def main(argv=None):
             print() ; break
         if user.lower() in {"exit", ":q", "quit"}:
             break
-        reply = engine.step(user)
+        reply = engine.stepv2(user)
+        console = Console()
+        md = Markdown(reply)
+        console.print(Panel(md, title="AI", expand=False))
         print(f"AI: {reply}\n")
         # Show debug summary every turn for transparency
-        if memory.summary():
-            print("[Memory Summary]\n" + memory.summary() + "\n")
-
-
+        # if memory.summary():
+        #     print("[Memory Summary]\n" + memory.summary() + "\n")
 
 
 if __name__ == "__main__":

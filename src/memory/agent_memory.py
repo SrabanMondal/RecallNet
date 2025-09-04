@@ -52,17 +52,17 @@ class AgentMemory(MemoryInterface):
         if self._turn_counter==self.snap_counter:
             self._create_snapshot()
             self._turn_counter=0
+            self.recent_store.save_rolling_snapshot(self._rolling_snapshot)
         
         if len(self._snapshots)==self.chap_counter:
             self._create_chapter()
             
         self.recent_store.save_turn(self._turns[-1])
-        self.recent_store.save_rolling_snapshot(self._rolling_snapshot)
         
 
     def _summarize_incremental(self, turn: Turn) -> SnapShot:
         """Update rolling summary with a single old turn"""
-        transcript = f"[{turn['time'].isoformat()}]\nUser: {turn['user']}\nAI: {turn['ai']}"
+        transcript = f"[{turn['time'].strftime("%Y-%m-%d %H:%M:%S")}]\nUser: {turn['user']}\nAI: {turn['ai']}"
         prompt = (
             f"{SUMMARY_SYSTEM_PROMPT}\n\n"
             f"Existing Summary:\n{self._rolling_summary}\n\n"
@@ -83,7 +83,7 @@ class AgentMemory(MemoryInterface):
         k_recent = k_recent or self.max_recent
         recent = list(self._turns)[-k_recent:]
         recent_txt = "\n".join(
-            [f"[{t['time'].isoformat()}]\nUser: {t['user']}\nAI: {t['ai']}" for t in recent]
+            [f"[{t.time.strftime("%Y-%m-%d %H:%M")}]\nUser: {t.user}\nAI: {t.ai}" for t in recent]
         )
 
         parts = []

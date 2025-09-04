@@ -8,6 +8,7 @@ class SnapShot:
     day: date   # yyyy-mm-dd format internally, but we can parse dd-mm-yy
     summary: str
     
+    
     def to_dict(self):
         return {
             "day": self.day.isoformat(),

@@ -2,7 +2,7 @@ import json
 from collections import deque
 from typing import Optional, Deque, List
 
-from core.memory_interface import Turn, SnapShot
+from src.core.memory_interface import Turn, SnapShot
 import os
 
 

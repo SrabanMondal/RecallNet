@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import List
 from src.core.llm_interface import LLMInterface
-from src.utils.prompting import SUMMARY_SYSTEM_PROMPT
+from src.utils.prompting import CHAPTER_SYSTEM_PROMPT, DAILY_SYSTEM_PROMPT
 from src.core.memory_interface import Chapter, SnapShot, DailyMemory
 from src.storage.daily_storage import DailyMemoryStorage
 from src.storage.chapter_storage import ChapterStorage
@@ -42,7 +42,7 @@ class Aggregator:
         # Prepare LLM prompt
         if prev_chapter and prev_chapter.memory.strip():
             prompt = (
-                f"{SUMMARY_SYSTEM_PROMPT}\n\n"
+                f"{CHAPTER_SYSTEM_PROMPT}\n\n"
                 f"Previous Chapter Memory:\n{prev_chapter.memory}\n\n"
                 f"Current Snapshots:\n{snapshot_text}\n\n"
                 "Compose a new chapter memory:\n"
@@ -52,7 +52,7 @@ class Aggregator:
             )
         else:
             prompt = (
-                f"{SUMMARY_SYSTEM_PROMPT}\n\n"
+                f"{CHAPTER_SYSTEM_PROMPT}\n\n"
                 f"Current Snapshots:\n{snapshot_text}\n\n"
                 "Compose a new chapter memory:\n"
                 "- Use only the snapshots provided.\n"
@@ -72,7 +72,7 @@ class Aggregator:
 
     def _daily_rollup(self):
         """Roll up last active day's chapters into a daily memory block."""
-        today = datetime.utcnow().date()
+        today = datetime.date.today()
 
         # last saved chapter find karo
         last_chapter = self.chapter_store.get_last_chapter()
@@ -88,13 +88,13 @@ class Aggregator:
             return  # already summarized
 
         # fetch all chapters from last active day
-        chapters: List[Chapter] = self.chapter_store.get_by_day(last_active_day)
+        chapters: List[Chapter] = self.chapter_store.retrieve_by_day(last_active_day)
         if not chapters:
             return
 
         merged = "\n".join([c.memory for c in chapters])
         prompt = (
-            f"{SUMMARY_SYSTEM_PROMPT}\n\n"
+            f"{DAILY_SYSTEM_PROMPT}\n\n"
             f"Chapters for {last_active_day.isoformat()}:\n{merged}\n\n"
             "Create a single daily memory capturing key events, decisions, preferences, and [ONGOING] items."
         )

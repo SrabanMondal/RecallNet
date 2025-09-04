@@ -1,2 +1,7 @@
 requests>=2.31.0
 google-generativeai>=0.7.0
+torch
+sentence-transformers
+faiss-cpu
+numpy
+#rich
